@@ -11,7 +11,8 @@ import kotlinx.coroutines.channels.Channel
 
 internal class AnimatedWebPDrawable(
     private val decoder: LibWebPAnimatedDecoder,
-    private val bitmapPool: BitmapPool
+    private val bitmapPool: BitmapPool,
+    firstFrame: LibWebPAnimatedDecoder.DecodeFrameResult? = null
 ) : Drawable(), Animatable {
     private val paint by lazy(LazyThreadSafetyMode.NONE) { Paint(Paint.FILTER_BITMAP_FLAG) }
     private val decodeChannel by lazy {
@@ -19,9 +20,9 @@ internal class AnimatedWebPDrawable(
     }
     private var decodeJob: Job? = null
     private var frameWaitingJob: Job? = null
-    private var pendingDecodeResult: LibWebPAnimatedDecoder.DecodeFrameResult? = null
+    private var pendingDecodeResult = firstFrame
 
-    private var currentBitmap: Bitmap? = null
+    private var currentBitmap: Bitmap? = firstFrame?.bitmap
         set(value) {
             if (field !== value) {
                 field?.let { bitmapPool.put(it) }
@@ -34,7 +35,9 @@ internal class AnimatedWebPDrawable(
         val time = SystemClock.uptimeMillis()
         val decodeFrameResult = pendingDecodeResult?.also {
             pendingDecodeResult = null
-        } ?: decodeChannel.tryReceive().getOrNull()
+        } ?: decodeChannel.tryReceive().getOrNull()?.also {
+            currentBitmap = it.bitmap
+        }
         if (decodeFrameResult == null) {
             currentBitmap?.let {
                 canvas.drawBitmap(it, null, bounds, paint)
@@ -43,6 +46,7 @@ internal class AnimatedWebPDrawable(
                 frameWaitingJob = GlobalScope.launch(Dispatchers.Main.immediate) {
                     val result = decodeChannel.receive()
                     pendingDecodeResult = result
+                    currentBitmap = result.bitmap
                     invalidateSelf()
                     frameWaitingJob = null
                 }
@@ -53,7 +57,6 @@ internal class AnimatedWebPDrawable(
                 canvas.drawColor(backgroundColor)
             }
             canvas.drawBitmap(decodeFrameResult.bitmap, null, bounds, paint)
-            currentBitmap = decodeFrameResult.bitmap
             scheduleSelf({
                 invalidateSelf()
             }, time + decodeFrameResult.frameLengthMs)

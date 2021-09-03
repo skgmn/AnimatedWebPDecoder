@@ -1,5 +1,6 @@
 package com.github.skgmn.webpdecoder
 
+import android.graphics.Bitmap
 import coil.bitmap.BitmapPool
 import coil.decode.DecodeResult
 import coil.decode.Decoder
@@ -21,12 +22,22 @@ class AnimatedWebPDecoder : Decoder {
     ): DecodeResult {
         // really wanted to avoid whole bytes copying but it's inevitable
         // unless the size of source is provided in advance
-        val decoder = withContext(Dispatchers.IO) {
+        val drawable = withContext(Dispatchers.IO) {
             val bytes = source.readByteArray()
             val byteBuffer = ByteBuffer.allocateDirect(bytes.size).put(bytes)
-            LibWebPAnimatedDecoder.create(byteBuffer)
+            val decoder = LibWebPAnimatedDecoder.create(byteBuffer)
+            val firstFrame = if (decoder.hasNextFrame()) {
+                val reuseBitmap = pool.getDirtyOrNull(
+                    decoder.width,
+                    decoder.height,
+                    Bitmap.Config.ARGB_8888
+                )
+                decoder.decodeNextFrame(reuseBitmap)
+            } else {
+                null
+            }
+            AnimatedWebPDrawable(decoder, pool, firstFrame)
         }
-        val drawable = AnimatedWebPDrawable(decoder, pool)
         return DecodeResult(drawable, false)
     }
 
