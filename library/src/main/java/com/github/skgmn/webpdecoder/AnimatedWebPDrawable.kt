@@ -14,12 +14,20 @@ internal class AnimatedWebPDrawable(
     private val bitmapPool: BitmapPool
 ) : Drawable(), Animatable {
     private val paint by lazy(LazyThreadSafetyMode.NONE) { Paint(Paint.FILTER_BITMAP_FLAG) }
-    private val decodeChannel by lazy(LazyThreadSafetyMode.NONE) {
-        Channel<LibWebPAnimatedDecoder.DecodeFrameResult>(2)
+    private val decodeChannel by lazy {
+        Channel<LibWebPAnimatedDecoder.DecodeFrameResult>(1)
     }
     private var decodeJob: Job? = null
-    private var scheduleJob: Job? = null
+    private var frameWaitingJob: Job? = null
     private var pendingDecodeResult: LibWebPAnimatedDecoder.DecodeFrameResult? = null
+
+    private var currentBitmap: Bitmap? = null
+        set(value) {
+            if (field !== value) {
+                field?.let { bitmapPool.put(it) }
+                field = value
+            }
+        }
 
     @OptIn(DelicateCoroutinesApi::class)
     override fun draw(canvas: Canvas) {
@@ -28,12 +36,15 @@ internal class AnimatedWebPDrawable(
             pendingDecodeResult = null
         } ?: decodeChannel.tryReceive().getOrNull()
         if (decodeFrameResult == null) {
-            if (isRunning && scheduleJob == null) {
-                scheduleJob = GlobalScope.launch(Dispatchers.Main.immediate) {
+            currentBitmap?.let {
+                canvas.drawBitmap(it, null, bounds, paint)
+            }
+            if (isRunning && frameWaitingJob == null) {
+                frameWaitingJob = GlobalScope.launch(Dispatchers.Main.immediate) {
                     val result = decodeChannel.receive()
                     pendingDecodeResult = result
                     invalidateSelf()
-                    scheduleJob = null
+                    frameWaitingJob = null
                 }
             }
         } else {
@@ -42,7 +53,7 @@ internal class AnimatedWebPDrawable(
                 canvas.drawColor(backgroundColor)
             }
             canvas.drawBitmap(decodeFrameResult.bitmap, null, bounds, paint)
-            bitmapPool.put(decodeFrameResult.bitmap)
+            currentBitmap = decodeFrameResult.bitmap
             scheduleSelf({
                 invalidateSelf()
             }, time + decodeFrameResult.frameLengthMs)
@@ -102,8 +113,8 @@ internal class AnimatedWebPDrawable(
     }
 
     override fun stop() {
-        scheduleJob?.cancel()
-        scheduleJob = null
+        frameWaitingJob?.cancel()
+        frameWaitingJob = null
 
         decodeJob?.cancel()
         decodeJob = null
