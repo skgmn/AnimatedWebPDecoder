@@ -4,7 +4,6 @@ import android.graphics.*
 import android.graphics.drawable.Animatable
 import android.graphics.drawable.Drawable
 import android.os.SystemClock
-import android.util.Log
 import coil.bitmap.BitmapPool
 import com.github.skgmn.webpdecoder.libwebp.AnimatedWebPDecoder
 import kotlinx.coroutines.*
@@ -19,16 +18,23 @@ class AnimatedWebPDrawable(
         Channel<AnimatedWebPDecoder.DecodeFrameResult>(2)
     }
     private var decodeJob: Job? = null
-    private var previousBitmap: Bitmap? = null
+    private var scheduleJob: Job? = null
+    private var pendingDecodeResult: AnimatedWebPDecoder.DecodeFrameResult? = null
 
+    @OptIn(DelicateCoroutinesApi::class)
     override fun draw(canvas: Canvas) {
         val time = SystemClock.uptimeMillis()
-        val decodeFrameResult = decodeChannel.tryReceive().getOrNull()
+        val decodeFrameResult = pendingDecodeResult?.also {
+            pendingDecodeResult = null
+        } ?: decodeChannel.tryReceive().getOrNull()
         if (decodeFrameResult == null) {
-            if (isRunning) {
-                scheduleSelf({
+            if (isRunning && scheduleJob == null) {
+                scheduleJob = GlobalScope.launch(Dispatchers.Main.immediate) {
+                    val result = decodeChannel.receive()
+                    pendingDecodeResult = result
                     invalidateSelf()
-                }, time + 10)
+                    scheduleJob = null
+                }
             }
         } else {
             val backgroundColor = decoder.backgroundColor
@@ -96,6 +102,9 @@ class AnimatedWebPDrawable(
     }
 
     override fun stop() {
+        scheduleJob?.cancel()
+        scheduleJob = null
+
         decodeJob?.cancel()
         decodeJob = null
     }
