@@ -4,13 +4,11 @@ plugins {
 }
 
 android {
-    compileSdk 31
+    compileSdk 30
 
     defaultConfig {
         minSdk 16
-        targetSdk 31
-        versionCode 1
-        versionName "1.0"
+        targetSdk 30
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
@@ -28,10 +26,11 @@ android {
     }
     kotlinOptions {
         jvmTarget = '1.8'
+        freeCompilerArgs += "-Xopt-in=kotlin.RequiresOptIn"
     }
 }
 
 dependencies {
-    implementation "com.facebook.fresco:animated-webp:2.5.0"
+    implementation project(":libwebp")
     implementation "io.coil-kt:coil:1.3.2"
 }
