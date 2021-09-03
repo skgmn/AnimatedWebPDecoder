@@ -1,8 +1,6 @@
 package com.github.skgmn.animatedwebpdecoder.sample
 
-import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
@@ -16,9 +14,8 @@ import coil.ImageLoader
 import coil.annotation.ExperimentalCoilApi
 import coil.compose.LocalImageLoader
 import coil.compose.rememberImagePainter
-import coil.util.DebugLogger
 import com.github.skgmn.animatedwebpdecoder.sample.ui.theme.AnimatedWebpDecoderTheme
-import com.github.skgmn.webpdecoder.WebPDecoder
+import com.github.skgmn.webpdecoder.AnimatedWebPDecoder
 
 class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalCoilApi::class)
@@ -27,7 +24,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val imageLoader = ImageLoader.Builder(this)
                 .componentRegistry {
-                    add(WebPDecoder(true))
+                    add(AnimatedWebPDecoder())
                 }
                 .build()
             CompositionLocalProvider(

@@ -1,10 +1,9 @@
 package com.github.skgmn.webpdecoder.libwebp
 
 import android.graphics.Bitmap
-import android.util.Log
 import java.nio.ByteBuffer
 
-class AnimatedWebPDecoder private constructor(
+class LibWebPAnimatedDecoder private constructor(
     @Suppress("unused") private val byteBuffer: ByteBuffer, // to keep in memory
     private val decoder: Long
 ) {
@@ -87,13 +86,13 @@ class AnimatedWebPDecoder private constructor(
             System.loadLibrary("libwebp")
         }
 
-        fun create(byteBuffer: ByteBuffer): AnimatedWebPDecoder {
+        fun create(byteBuffer: ByteBuffer): LibWebPAnimatedDecoder {
             val directBuffer = if (byteBuffer.isDirect) {
                 byteBuffer
             } else {
                 ByteBuffer.allocateDirect(byteBuffer.limit()).put(byteBuffer)
             }
-            return AnimatedWebPDecoder(directBuffer, createDecoder(directBuffer))
+            return LibWebPAnimatedDecoder(directBuffer, createDecoder(directBuffer))
         }
     }
 }

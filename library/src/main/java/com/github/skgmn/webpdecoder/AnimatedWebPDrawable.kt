@@ -5,21 +5,21 @@ import android.graphics.drawable.Animatable
 import android.graphics.drawable.Drawable
 import android.os.SystemClock
 import coil.bitmap.BitmapPool
-import com.github.skgmn.webpdecoder.libwebp.AnimatedWebPDecoder
+import com.github.skgmn.webpdecoder.libwebp.LibWebPAnimatedDecoder
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 
-class AnimatedWebPDrawable(
-    private val decoder: AnimatedWebPDecoder,
+internal class AnimatedWebPDrawable(
+    private val decoder: LibWebPAnimatedDecoder,
     private val bitmapPool: BitmapPool
 ) : Drawable(), Animatable {
     private val paint by lazy(LazyThreadSafetyMode.NONE) { Paint(Paint.FILTER_BITMAP_FLAG) }
     private val decodeChannel by lazy(LazyThreadSafetyMode.NONE) {
-        Channel<AnimatedWebPDecoder.DecodeFrameResult>(2)
+        Channel<LibWebPAnimatedDecoder.DecodeFrameResult>(2)
     }
     private var decodeJob: Job? = null
     private var scheduleJob: Job? = null
-    private var pendingDecodeResult: AnimatedWebPDecoder.DecodeFrameResult? = null
+    private var pendingDecodeResult: LibWebPAnimatedDecoder.DecodeFrameResult? = null
 
     @OptIn(DelicateCoroutinesApi::class)
     override fun draw(canvas: Canvas) {

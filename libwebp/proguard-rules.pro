@@ -20,11 +20,11 @@
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
 
--keep class com.github.skgmn.webpdecoder.libwebp.AnimatedWebPDecoder {
+-keep class com.github.skgmn.webpdecoder.libwebp.LibWebPAnimatedDecoder {
     <init>(*);
     native <methods>;
 }
 
--keep class com.github.skgmn.webpdecoder.libwebp.AnimatedWebPDecoder$Metadata {
+-keep class com.github.skgmn.webpdecoder.libwebp.LibWebPAnimatedDecoder$Metadata {
     *;
 }
