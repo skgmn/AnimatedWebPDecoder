@@ -356,8 +356,6 @@ WEBP_EXTERN const WebPDemuxer* WebPAnimDecoderGetDemuxer(
 //   dec - (in/out) decoder instance to be deleted
 WEBP_EXTERN void WebPAnimDecoderDelete(WebPAnimDecoder* dec);
 
-WEBP_EXTERN int WebPDemuxHasAlpha(const WebPDemuxer* demuxer);
-
 #ifdef __cplusplus
 }    // extern "C"
 #endif

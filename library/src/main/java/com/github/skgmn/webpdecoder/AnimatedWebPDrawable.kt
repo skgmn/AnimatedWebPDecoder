@@ -52,10 +52,6 @@ internal class AnimatedWebPDrawable(
                 }
             }
         } else {
-            val backgroundColor = decoder.backgroundColor
-            if (Color.alpha(backgroundColor) != 0) {
-                canvas.drawColor(backgroundColor)
-            }
             canvas.drawBitmap(decodeFrameResult.bitmap, null, bounds, paint)
             scheduleSelf({
                 invalidateSelf()
@@ -72,11 +68,7 @@ internal class AnimatedWebPDrawable(
     }
 
     override fun getOpacity(): Int {
-        return if (decoder.hasAlpha) {
-            PixelFormat.TRANSLUCENT
-        } else {
-            PixelFormat.OPAQUE
-        }
+        return PixelFormat.TRANSLUCENT
     }
 
     override fun getIntrinsicWidth(): Int {

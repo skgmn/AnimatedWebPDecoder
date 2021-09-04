@@ -49,19 +49,17 @@ Java_com_github_skgmn_webpdecoder_libwebp_LibWebPAnimatedDecoder_getMetadata(
     WebPAnimDecoderGetInfo(decoder, &anim_info);
 
     const WebPDemuxer *demuxer = WebPAnimDecoderGetDemuxer(decoder);
-    int hasAlpha = WebPDemuxHasAlpha(demuxer);
 
     jclass metadataClass = env->FindClass(
             "com/github/skgmn/webpdecoder/libwebp/LibWebPAnimatedDecoder$Metadata");
-    jmethodID metadataCtor = env->GetMethodID(metadataClass, "<init>", "(IIIIIZ)V");
+    jmethodID metadataCtor = env->GetMethodID(metadataClass, "<init>", "(IIIII)V");
     jobject metadata = env->NewObject(
             metadataClass, metadataCtor,
             (jint) anim_info.canvas_width,
             (jint) anim_info.canvas_height,
             (jint) anim_info.loop_count,
             (jint) anim_info.bgcolor,
-            (jint) anim_info.frame_count,
-            (jboolean) hasAlpha
+            (jint) anim_info.frame_count
     );
     return metadata;
 }

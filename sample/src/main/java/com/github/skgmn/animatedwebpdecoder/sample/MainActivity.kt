@@ -4,11 +4,15 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import coil.ImageLoader
 import coil.annotation.ExperimentalCoilApi
@@ -31,12 +35,21 @@ class MainActivity : ComponentActivity() {
                 LocalImageLoader provides imageLoader
             ) {
                 AnimatedWebpDecoderTheme {
-                    Surface(color = MaterialTheme.colors.background) {
-                        val imagePainter = rememberImagePainter(
-                            "android.resource://$packageName/" + R.drawable.animated_webp_sample
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colors.background)
+                    ) {
+                        Image(
+                            painter = rememberImagePainter(
+                                "android.resource://$packageName/" + R.drawable.animated_webp_sample
+                            ),
+                            contentDescription = null
                         )
                         Image(
-                            painter = imagePainter,
+                            painter = rememberImagePainter(
+                                "android.resource://$packageName/" + R.drawable.animated_webp_sample_2
+                            ),
                             contentDescription = null
                         )
                     }

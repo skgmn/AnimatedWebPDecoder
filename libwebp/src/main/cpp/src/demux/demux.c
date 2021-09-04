@@ -975,7 +975,3 @@ int WebPDemuxPrevChunk(WebPChunkIterator* iter) {
 void WebPDemuxReleaseChunkIterator(WebPChunkIterator* iter) {
   (void)iter;
 }
-
-int WebPDemuxHasAlpha(const WebPDemuxer* demuxer) {
-  return (demuxer->feature_flags_ & ALPHA_FLAG) == ALPHA_FLAG;
-}
