@@ -50,8 +50,7 @@ internal class AnimatedWebPDrawable(
             }
             if (isRunning && frameWaitingJob == null) {
                 frameWaitingJob = GlobalScope.launch(Dispatchers.Main.immediate) {
-                    val result = decodeChannel.receive()
-                    pendingDecodeResult = result
+                    pendingDecodeResult = decodeChannel.receive()
                     invalidateSelf()
                     frameWaitingJob = null
                 }
