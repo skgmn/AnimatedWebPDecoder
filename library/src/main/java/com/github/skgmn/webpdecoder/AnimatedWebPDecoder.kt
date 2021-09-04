@@ -25,7 +25,7 @@ class AnimatedWebPDecoder : Decoder {
         val drawable = withContext(Dispatchers.IO) {
             val bytes = source.readByteArray()
             val byteBuffer = ByteBuffer.allocateDirect(bytes.size).put(bytes)
-            val decoder = LibWebPAnimatedDecoder.create(byteBuffer)
+            val decoder = LibWebPAnimatedDecoder.create(byteBuffer, options.premultipliedAlpha)
             val firstFrame = if (decoder.hasNextFrame()) {
                 val reuseBitmap = pool.getDirtyOrNull(
                     decoder.width,

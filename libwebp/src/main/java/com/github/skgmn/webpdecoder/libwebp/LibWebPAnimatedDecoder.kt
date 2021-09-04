@@ -1,11 +1,13 @@
 package com.github.skgmn.webpdecoder.libwebp
 
 import android.graphics.Bitmap
+import android.os.Build
 import java.nio.ByteBuffer
 
 class LibWebPAnimatedDecoder private constructor(
     @Suppress("unused") private val byteBuffer: ByteBuffer, // to keep in memory
-    private val decoder: Long
+    private val decoder: Long,
+    private val premultipliedAlpha: Boolean
 ) {
     val width get() = metadata.width
     val height get() = metadata.height
@@ -23,8 +25,10 @@ class LibWebPAnimatedDecoder private constructor(
                         it.height == height &&
                         it.config == Bitmap.Config.ARGB_8888
             } ?: Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)!!
-        if (!outBitmap.isPremultiplied) {
-            outBitmap.isPremultiplied = true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            if (outBitmap.isPremultiplied != premultipliedAlpha) {
+                outBitmap.isPremultiplied = premultipliedAlpha
+            }
         }
         val duration = decodeNextFrame(decoder, outBitmap)
         return if (duration >= 0) {
@@ -65,7 +69,10 @@ class LibWebPAnimatedDecoder private constructor(
 
     companion object {
         @JvmStatic
-        private external fun createDecoder(byteBuffer: ByteBuffer): Long
+        private external fun createDecoder(
+            byteBuffer: ByteBuffer,
+            premultipliedAlpha: Boolean
+        ): Long
 
         @JvmStatic
         private external fun deleteDecoder(decoder: Long)
@@ -86,13 +93,23 @@ class LibWebPAnimatedDecoder private constructor(
             System.loadLibrary("libwebp")
         }
 
-        fun create(byteBuffer: ByteBuffer): LibWebPAnimatedDecoder {
+        fun create(
+            byteBuffer: ByteBuffer,
+            premultipliedAlpha: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT
+        ): LibWebPAnimatedDecoder {
             val directBuffer = if (byteBuffer.isDirect) {
                 byteBuffer
             } else {
                 ByteBuffer.allocateDirect(byteBuffer.limit()).put(byteBuffer)
             }
-            return LibWebPAnimatedDecoder(directBuffer, createDecoder(directBuffer))
+            return LibWebPAnimatedDecoder(
+                directBuffer,
+                createDecoder(
+                    directBuffer,
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT && premultipliedAlpha
+                ),
+                premultipliedAlpha
+            )
         }
     }
 }
