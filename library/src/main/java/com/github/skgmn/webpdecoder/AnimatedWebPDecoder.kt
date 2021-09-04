@@ -20,10 +20,10 @@ class AnimatedWebPDecoder : Decoder {
         size: Size,
         options: Options
     ): DecodeResult {
-        // really wanted to avoid whole bytes copying but it's inevitable
-        // unless the size of source is provided in advance
         val drawable = withContext(Dispatchers.IO) {
             val bytes = source.readByteArray()
+            // really wanted to avoid whole bytes copying but it's inevitable
+            // unless the size of source is provided in advance
             val byteBuffer = ByteBuffer.allocateDirect(bytes.size).put(bytes)
             val decoder = LibWebPAnimatedDecoder.create(byteBuffer, options.premultipliedAlpha)
             val firstFrame = if (decoder.hasNextFrame()) {

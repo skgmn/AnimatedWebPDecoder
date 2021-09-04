@@ -22,10 +22,18 @@ internal class AnimatedWebPDrawable(
     private var frameWaitingJob: Job? = null
     private var pendingDecodeResult = firstFrame
 
+    // currentBitmap should be set right after Canvas.drawBitmap() is called
+    // since it returns existing value to BitmapPool.
     private var currentBitmap: Bitmap? = firstFrame?.bitmap
         set(value) {
             if (field !== value) {
-                field?.let { bitmapPool.put(it) }
+                field?.let {
+                    // put the bitmap to the pool after it is detached from RenderNode
+                    // simply by using handler
+                    // unless this spam log may be appeared:
+                    //   Called reconfigure on a bitmap that is in use! This may cause graphical corruption!
+                    scheduleSelf({ bitmapPool.put(it) }, 0)
+                }
                 field = value
             }
         }
@@ -35,9 +43,7 @@ internal class AnimatedWebPDrawable(
         val time = SystemClock.uptimeMillis()
         val decodeFrameResult = pendingDecodeResult?.also {
             pendingDecodeResult = null
-        } ?: decodeChannel.tryReceive().getOrNull()?.also {
-            currentBitmap = it.bitmap
-        }
+        } ?: decodeChannel.tryReceive().getOrNull()
         if (decodeFrameResult == null) {
             currentBitmap?.let {
                 canvas.drawBitmap(it, null, bounds, paint)
@@ -46,13 +52,13 @@ internal class AnimatedWebPDrawable(
                 frameWaitingJob = GlobalScope.launch(Dispatchers.Main.immediate) {
                     val result = decodeChannel.receive()
                     pendingDecodeResult = result
-                    currentBitmap = result.bitmap
                     invalidateSelf()
                     frameWaitingJob = null
                 }
             }
         } else {
             canvas.drawBitmap(decodeFrameResult.bitmap, null, bounds, paint)
+            currentBitmap = decodeFrameResult.bitmap
             scheduleSelf({
                 invalidateSelf()
             }, time + decodeFrameResult.frameLengthMs)

@@ -52,6 +52,12 @@ class MainActivity : ComponentActivity() {
                             ),
                             contentDescription = null
                         )
+                        Image(
+                            painter = rememberImagePainter(
+                                "android.resource://$packageName/" + R.drawable.animated_webp_sample_3
+                            ),
+                            contentDescription = null
+                        )
                     }
                 }
             }
