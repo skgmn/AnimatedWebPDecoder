@@ -4,6 +4,7 @@ import android.graphics.*
 import android.graphics.drawable.Animatable
 import android.graphics.drawable.Drawable
 import android.os.SystemClock
+import androidx.annotation.GuardedBy
 import coil.bitmap.BitmapPool
 import com.github.skgmn.webpdecoder.libwebp.LibWebPAnimatedDecoder
 import kotlinx.coroutines.*
@@ -11,8 +12,13 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.channels.ClosedSendChannelException
 
+@OptIn(
+    DelicateCoroutinesApi::class,
+    ExperimentalCoroutinesApi::class
+)
 internal class AnimatedWebPDrawable(
     private val decoder: LibWebPAnimatedDecoder,
+    @GuardedBy("bitmapPool")
     private val bitmapPool: BitmapPool,
     firstFrame: LibWebPAnimatedDecoder.DecodeFrameResult? = null
 ) : Drawable(), Animatable {
@@ -22,6 +28,7 @@ internal class AnimatedWebPDrawable(
     private var frameWaitingJob: Job? = null
     private var pendingDecodeResult: LibWebPAnimatedDecoder.DecodeFrameResult? = null
     private var nextFrame = false
+    private var isRunning = false
 
     // currentBitmap should be set right after Canvas.drawBitmap() is called
     // since it returns existing value to BitmapPool.
@@ -33,7 +40,11 @@ internal class AnimatedWebPDrawable(
                     // simply by using handler
                     // unless this spam log may be appeared:
                     //   Called reconfigure on a bitmap that is in use! This may cause graphical corruption!
-                    scheduleSelf({ bitmapPool.put(it) }, 0)
+                    scheduleSelf({
+                        synchronized(bitmapPool) {
+                            bitmapPool.put(it)
+                        }
+                    }, 0)
                 }
                 field = value
             }
@@ -50,7 +61,6 @@ internal class AnimatedWebPDrawable(
         invalidateSelf()
     }
 
-    @OptIn(DelicateCoroutinesApi::class)
     override fun draw(canvas: Canvas) {
         val time = SystemClock.uptimeMillis()
         if (queueTime >= 0) {
@@ -75,7 +85,9 @@ internal class AnimatedWebPDrawable(
             currentDecodingResult?.bitmap?.let {
                 canvas.drawBitmap(it, null, bounds, paint)
             }
-            if (isRunning && frameWaitingJob?.isActive != true) {
+            if (decodeJob?.isActive != true && channel.isEmpty) {
+                stop()
+            } else if (frameWaitingJob?.isActive != true) {
                 frameWaitingJob = GlobalScope.launch(Dispatchers.Main.immediate) {
                     try {
                         pendingDecodeResult = channel.receive()
@@ -92,10 +104,14 @@ internal class AnimatedWebPDrawable(
         } else {
             canvas.drawBitmap(decodeFrameResult.bitmap, null, bounds, paint)
             currentDecodingResult = decodeFrameResult
-            scheduleSelf(
-                nextFrameScheduler,
-                time + (decodeFrameResult.frameLengthMs - queueDelay).coerceAtLeast(0)
-            )
+            if (decodeJob?.isActive != true && channel.isEmpty) {
+                stop()
+            } else {
+                scheduleSelf(
+                    nextFrameScheduler,
+                    time + (decodeFrameResult.frameLengthMs - queueDelay).coerceAtLeast(0)
+                )
+            }
         }
     }
 
@@ -121,10 +137,14 @@ internal class AnimatedWebPDrawable(
 
     @OptIn(DelicateCoroutinesApi::class)
     override fun start() {
-        if (decodeJob?.isActive == true) return
+        if (isRunning) return
+        isRunning = true
+
         val channel = Channel<LibWebPAnimatedDecoder.DecodeFrameResult>(
             capacity = 1,
-            onUndeliveredElement = { bitmapPool.put(it.bitmap) }
+            onUndeliveredElement = {
+                synchronized(bitmapPool) { bitmapPool.put(it.bitmap) }
+            }
         ).also {
             decodeChannel = it
         }
@@ -134,15 +154,23 @@ internal class AnimatedWebPDrawable(
             val loopCount = decoder.loopCount
             var i = 0
             while (isActive && (loopCount == 0 || i < loopCount)) {
+                decoder.reset()
                 while (isActive && decoder.hasNextFrame()) {
-                    val reuseBitmap = bitmapPool.getDirtyOrNull(
-                        decoder.width,
-                        decoder.height,
-                        Bitmap.Config.ARGB_8888
-                    )
+                    val reuseBitmap = synchronized(bitmapPool) {
+                        bitmapPool.getDirtyOrNull(
+                            decoder.width,
+                            decoder.height,
+                            Bitmap.Config.ARGB_8888
+                        )
+                    }
                     val result = decoder.decodeNextFrame(reuseBitmap)
+                    if (!isActive) {
+                        break
+                    }
                     if (result == null || result.bitmap !== reuseBitmap) {
-                        reuseBitmap?.let { bitmapPool.put(it) }
+                        reuseBitmap?.let {
+                            synchronized(bitmapPool) { bitmapPool.put(it) }
+                        }
                     }
                     if (result == null) {
                         continue
@@ -150,20 +178,21 @@ internal class AnimatedWebPDrawable(
                     try {
                         channel.send(result)
                     } catch (e: ClosedSendChannelException) {
-                        bitmapPool.put(result.bitmap)
+                        synchronized(bitmapPool) {
+                            bitmapPool.put(result.bitmap)
+                        }
                         break
                     }
                 }
-                decoder.reset()
                 ++i
-            }
-            if (isActive) {
-                withContext(Dispatchers.Main.immediate) { stop() }
             }
         }
     }
 
     override fun stop() {
+        if (!isRunning) return
+        isRunning = false
+
         decodeJob?.cancel()
         decodeJob = null
 
@@ -175,12 +204,10 @@ internal class AnimatedWebPDrawable(
 
         nextFrame = false
         unscheduleSelf(nextFrameScheduler)
-
-        decoder.reset()
     }
 
     override fun isRunning(): Boolean {
-        return decodeJob?.isActive == true
+        return isRunning
     }
 
     private fun addQueueDelay(delay: Long) {
