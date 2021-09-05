@@ -4,7 +4,7 @@ import android.graphics.Bitmap
 import android.os.Build
 import java.nio.ByteBuffer
 
-class LibWebPAnimatedDecoder private constructor(
+internal class LibWebPAnimatedDecoder private constructor(
     @Suppress("unused") private val byteBuffer: ByteBuffer, // to keep in memory
     private val decoder: Long,
     private val premultipliedAlpha: Boolean
@@ -12,8 +12,6 @@ class LibWebPAnimatedDecoder private constructor(
     val width get() = metadata.width
     val height get() = metadata.height
     val loopCount get() = metadata.loopCount
-    val backgroundColor get() = metadata.backgroundColor
-    val frameCount get() = metadata.frameCount
 
     private val metadata by lazy(LazyThreadSafetyMode.NONE) { getMetadata(decoder) }
 
@@ -60,9 +58,7 @@ class LibWebPAnimatedDecoder private constructor(
     private class Metadata(
         val width: Int,
         val height: Int,
-        val loopCount: Int,
-        val backgroundColor: Int,
-        val frameCount: Int
+        val loopCount: Int
     )
 
     companion object {
