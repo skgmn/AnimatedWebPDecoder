@@ -4,7 +4,7 @@ import android.graphics.Bitmap
 import android.os.Build
 import java.nio.ByteBuffer
 
-class LibWebPAnimatedDecoder private constructor(
+internal class LibWebPAnimatedDecoder private constructor(
     @Suppress("unused") private val byteBuffer: ByteBuffer, // to keep in memory
     private val decoder: Long,
     private val premultipliedAlpha: Boolean
