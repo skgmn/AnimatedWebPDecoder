@@ -8,4 +8,3 @@ dependencyResolutionManagement {
 rootProject.name = "AnimatedWebPDecoder"
 include ':sample'
 include ':library'
-include ':libwebp'

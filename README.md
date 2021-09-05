@@ -24,7 +24,7 @@ In your `app/build.gradle`
 
 ```gradle
 dependencies {
-    implementation "com.github.skgmn:animatedwebpdecoder:0.1.0"
+    implementation "com.github.skgmn:animatedwebpdecoder:0.1.2"
 }
 ```
 
