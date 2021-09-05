@@ -12,8 +12,6 @@ internal class LibWebPAnimatedDecoder private constructor(
     val width get() = metadata.width
     val height get() = metadata.height
     val loopCount get() = metadata.loopCount
-    val backgroundColor get() = metadata.backgroundColor
-    val frameCount get() = metadata.frameCount
 
     private val metadata by lazy(LazyThreadSafetyMode.NONE) { getMetadata(decoder) }
 
@@ -60,9 +58,7 @@ internal class LibWebPAnimatedDecoder private constructor(
     private class Metadata(
         val width: Int,
         val height: Int,
-        val loopCount: Int,
-        val backgroundColor: Int,
-        val frameCount: Int
+        val loopCount: Int
     )
 
     companion object {
