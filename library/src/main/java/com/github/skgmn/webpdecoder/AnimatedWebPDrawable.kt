@@ -1,10 +1,10 @@
 package com.github.skgmn.webpdecoder
 
 import android.graphics.*
-import android.graphics.drawable.Animatable
 import android.graphics.drawable.Drawable
 import android.os.SystemClock
 import androidx.annotation.GuardedBy
+import androidx.vectordrawable.graphics.drawable.Animatable2Compat
 import coil.bitmap.BitmapPool
 import com.github.skgmn.webpdecoder.libwebp.LibWebPAnimatedDecoder
 import kotlinx.coroutines.*
@@ -21,7 +21,7 @@ internal class AnimatedWebPDrawable(
     @GuardedBy("bitmapPool")
     private val bitmapPool: BitmapPool,
     firstFrame: LibWebPAnimatedDecoder.DecodeFrameResult? = null
-) : Drawable(), Animatable {
+) : Drawable(), Animatable2Compat {
     private val paint by lazy(LazyThreadSafetyMode.NONE) { Paint(Paint.FILTER_BITMAP_FLAG) }
     private var decodeChannel: Channel<LibWebPAnimatedDecoder.DecodeFrameResult>? = null
     private var decodeJob: Job? = null
@@ -29,6 +29,7 @@ internal class AnimatedWebPDrawable(
     private var pendingDecodeResult: LibWebPAnimatedDecoder.DecodeFrameResult? = null
     private var nextFrame = false
     private var isRunning = false
+    private val callbacks = mutableListOf<Animatable2Compat.AnimationCallback>()
 
     // currentBitmap should be set right after Canvas.drawBitmap() is called
     // since it returns existing value to BitmapPool.
@@ -140,6 +141,8 @@ internal class AnimatedWebPDrawable(
         if (isRunning) return
         isRunning = true
 
+        callbacks.forEach { it.onAnimationStart(this) }
+
         val channel = Channel<LibWebPAnimatedDecoder.DecodeFrameResult>(
             capacity = 1,
             onUndeliveredElement = {
@@ -151,7 +154,7 @@ internal class AnimatedWebPDrawable(
         nextFrame = true
         invalidateSelf()
         decodeJob = GlobalScope.launch(Dispatchers.Default) {
-            val loopCount = decoder.loopCount
+            val loopCount = 3 // decoder.loopCount
             var i = 0
             while (isActive && (loopCount == 0 || i < loopCount)) {
                 decoder.reset()
@@ -204,10 +207,31 @@ internal class AnimatedWebPDrawable(
 
         nextFrame = false
         unscheduleSelf(nextFrameScheduler)
+
+        callbacks.forEach { it.onAnimationEnd(this) }
     }
 
     override fun isRunning(): Boolean {
         return isRunning
+    }
+
+    override fun registerAnimationCallback(callback: Animatable2Compat.AnimationCallback) {
+        if (callback !in callbacks) {
+            callbacks += callback
+        }
+    }
+
+    override fun unregisterAnimationCallback(callback: Animatable2Compat.AnimationCallback): Boolean {
+        return if (callback in callbacks) {
+            callbacks -= callback
+            true
+        } else {
+            false
+        }
+    }
+
+    override fun clearAnimationCallbacks() {
+        callbacks.clear()
     }
 
     private fun addQueueDelay(delay: Long) {
