@@ -21,7 +21,7 @@ Java_com_github_skgmn_webpdecoder_libwebp_LibWebPAnimatedDecoder_createDecoder(
     WebPAnimDecoderOptions dec_options;
     WebPAnimDecoderOptionsInit(&dec_options);
     dec_options.color_mode = premultiplied_alpha ? MODE_rgbA : MODE_RGBA;
-    dec_options.use_threads = true;
+    dec_options.use_threads = false;
 
     auto *decoder = WebPAnimDecoderNew(&data, &dec_options);
     return reinterpret_cast<jlong>(decoder);

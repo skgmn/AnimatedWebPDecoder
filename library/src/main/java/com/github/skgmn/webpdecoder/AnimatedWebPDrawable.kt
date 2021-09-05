@@ -21,13 +21,14 @@ internal class AnimatedWebPDrawable(
     private var decodeJob: Job? = null
     private var frameWaitingJob: Job? = null
     private var pendingDecodeResult = firstFrame
+    private var nextFrame = false
 
     // currentBitmap should be set right after Canvas.drawBitmap() is called
     // since it returns existing value to BitmapPool.
-    private var currentBitmap: Bitmap? = firstFrame?.bitmap
+    private var currentDecodingResult: LibWebPAnimatedDecoder.DecodeFrameResult? = firstFrame
         set(value) {
             if (field !== value) {
-                field?.let {
+                field?.bitmap?.let {
                     // put the bitmap to the pool after it is detached from RenderNode
                     // simply by using handler
                     // unless this spam log may be appeared:
@@ -38,29 +39,54 @@ internal class AnimatedWebPDrawable(
             }
         }
 
+    private var queueTime = -1L
+    private var queueDelay = INITIAL_QUEUE_DELAY_HEURISTIC
+    private var queueDelayWindow = ArrayDeque(listOf(INITIAL_QUEUE_DELAY_HEURISTIC))
+    private var queueDelaySum = INITIAL_QUEUE_DELAY_HEURISTIC
+
+    private val nextFrameScheduler = {
+        nextFrame = true
+        queueTime = SystemClock.uptimeMillis()
+        invalidateSelf()
+    }
+
     @OptIn(DelicateCoroutinesApi::class)
     override fun draw(canvas: Canvas) {
         val time = SystemClock.uptimeMillis()
+        if (queueTime >= 0) {
+            val currentDelay = time - queueTime
+            addQueueDelay(currentDelay)
+            queueTime = -1
+        }
+
+        if (!isRunning || !nextFrame) {
+            currentDecodingResult?.bitmap?.let {
+                canvas.drawBitmap(it, null, bounds, paint)
+            }
+            return
+        }
+
+        nextFrame = false
         val decodeFrameResult = pendingDecodeResult?.also {
             pendingDecodeResult = null
         } ?: decodeChannel.tryReceive().getOrNull()
         if (decodeFrameResult == null) {
-            currentBitmap?.let {
+            currentDecodingResult?.bitmap?.let {
                 canvas.drawBitmap(it, null, bounds, paint)
             }
-            if (isRunning && frameWaitingJob == null) {
+            if (isRunning && frameWaitingJob?.isActive != true) {
                 frameWaitingJob = GlobalScope.launch(Dispatchers.Main.immediate) {
                     pendingDecodeResult = decodeChannel.receive()
-                    invalidateSelf()
                     frameWaitingJob = null
+                    nextFrame = true
+                    queueTime = SystemClock.uptimeMillis()
+                    invalidateSelf()
                 }
             }
         } else {
             canvas.drawBitmap(decodeFrameResult.bitmap, null, bounds, paint)
-            currentBitmap = decodeFrameResult.bitmap
-            scheduleSelf({
-                invalidateSelf()
-            }, time + decodeFrameResult.frameLengthMs)
+            currentDecodingResult = decodeFrameResult
+            queueNextFrame(time, decodeFrameResult)
         }
     }
 
@@ -86,7 +112,13 @@ internal class AnimatedWebPDrawable(
 
     @OptIn(DelicateCoroutinesApi::class)
     override fun start() {
-        if (decodeJob != null) return
+        if (decodeJob?.isActive == true) return
+        invalidateSelf()
+        currentDecodingResult?.let {
+            queueNextFrame(SystemClock.uptimeMillis(), it)
+        } ?: run {
+            nextFrame = true
+        }
         decodeJob = GlobalScope.launch(Dispatchers.Default) {
             val loopCount = decoder.loopCount
             var i = 0
@@ -118,9 +150,38 @@ internal class AnimatedWebPDrawable(
 
         decodeJob?.cancel()
         decodeJob = null
+
+        nextFrame = false
+        unscheduleSelf(nextFrameScheduler)
     }
 
     override fun isRunning(): Boolean {
         return decodeJob?.isActive == true
+    }
+
+    private fun addQueueDelay(delay: Long) {
+        val coercedDelay = delay.coerceAtMost(MAX_QUEUE_DELAY_HEURISTIC)
+        queueDelayWindow.addLast(coercedDelay)
+        queueDelaySum += coercedDelay
+        while (queueDelayWindow.size > QUEUE_DELAY_WINDOW_COUNT) {
+            queueDelaySum -= queueDelayWindow.removeFirst()
+        }
+        queueDelay = (queueDelaySum / queueDelayWindow.size).coerceAtMost(MAX_QUEUE_DELAY_HEURISTIC)
+    }
+
+    private fun queueNextFrame(
+        time: Long,
+        decodeFrameResult: LibWebPAnimatedDecoder.DecodeFrameResult
+    ) {
+        scheduleSelf(
+            nextFrameScheduler,
+            time + (decodeFrameResult.frameLengthMs - queueDelay).coerceAtLeast(0)
+        )
+    }
+
+    companion object {
+        private const val INITIAL_QUEUE_DELAY_HEURISTIC = 11L
+        private const val MAX_QUEUE_DELAY_HEURISTIC = 21L
+        private const val QUEUE_DELAY_WINDOW_COUNT = 20
     }
 }
