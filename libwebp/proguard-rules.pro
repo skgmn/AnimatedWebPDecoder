@@ -21,7 +21,7 @@
 #-renamesourcefileattribute SourceFile
 
 -keep class com.github.skgmn.webpdecoder.libwebp.LibWebPAnimatedDecoder {
-    <init>(*);
+    java.nio.ByteBuffer byteBuffer;
     native <methods>;
 }
 
