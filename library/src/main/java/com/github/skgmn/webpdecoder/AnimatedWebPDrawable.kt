@@ -8,6 +8,7 @@ import coil.bitmap.BitmapPool
 import com.github.skgmn.webpdecoder.libwebp.LibWebPAnimatedDecoder
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ClosedSendChannelException
 
 internal class AnimatedWebPDrawable(
     private val decoder: LibWebPAnimatedDecoder,
@@ -15,17 +16,15 @@ internal class AnimatedWebPDrawable(
     firstFrame: LibWebPAnimatedDecoder.DecodeFrameResult? = null
 ) : Drawable(), Animatable {
     private val paint by lazy(LazyThreadSafetyMode.NONE) { Paint(Paint.FILTER_BITMAP_FLAG) }
-    private val decodeChannel by lazy {
-        Channel<LibWebPAnimatedDecoder.DecodeFrameResult>(1)
-    }
+    private var decodeChannel: Channel<LibWebPAnimatedDecoder.DecodeFrameResult>? = null
     private var decodeJob: Job? = null
     private var frameWaitingJob: Job? = null
-    private var pendingDecodeResult = firstFrame
+    private var pendingDecodeResult: LibWebPAnimatedDecoder.DecodeFrameResult? = null
     private var nextFrame = false
 
     // currentBitmap should be set right after Canvas.drawBitmap() is called
     // since it returns existing value to BitmapPool.
-    private var currentDecodingResult: LibWebPAnimatedDecoder.DecodeFrameResult? = firstFrame
+    private var currentDecodingResult = firstFrame
         set(value) {
             if (field !== value) {
                 field?.bitmap?.let {
@@ -59,7 +58,8 @@ internal class AnimatedWebPDrawable(
             queueTime = -1
         }
 
-        if (!isRunning || !nextFrame) {
+        val channel = decodeChannel
+        if (!isRunning || !nextFrame || channel == null) {
             currentDecodingResult?.bitmap?.let {
                 canvas.drawBitmap(it, null, bounds, paint)
             }
@@ -69,14 +69,14 @@ internal class AnimatedWebPDrawable(
         nextFrame = false
         val decodeFrameResult = pendingDecodeResult?.also {
             pendingDecodeResult = null
-        } ?: decodeChannel.tryReceive().getOrNull()
+        } ?: channel.tryReceive().getOrNull()
         if (decodeFrameResult == null) {
             currentDecodingResult?.bitmap?.let {
                 canvas.drawBitmap(it, null, bounds, paint)
             }
             if (isRunning && frameWaitingJob?.isActive != true) {
                 frameWaitingJob = GlobalScope.launch(Dispatchers.Main.immediate) {
-                    pendingDecodeResult = decodeChannel.receive()
+                    pendingDecodeResult = channel.receive()
                     frameWaitingJob = null
                     nextFrame = true
                     queueTime = SystemClock.uptimeMillis()
@@ -86,7 +86,10 @@ internal class AnimatedWebPDrawable(
         } else {
             canvas.drawBitmap(decodeFrameResult.bitmap, null, bounds, paint)
             currentDecodingResult = decodeFrameResult
-            queueNextFrame(time, decodeFrameResult)
+            scheduleSelf(
+                nextFrameScheduler,
+                time + (decodeFrameResult.frameLengthMs - queueDelay).coerceAtLeast(0)
+            )
         }
     }
 
@@ -113,12 +116,14 @@ internal class AnimatedWebPDrawable(
     @OptIn(DelicateCoroutinesApi::class)
     override fun start() {
         if (decodeJob?.isActive == true) return
-        invalidateSelf()
-        currentDecodingResult?.let {
-            queueNextFrame(SystemClock.uptimeMillis(), it)
-        } ?: run {
-            nextFrame = true
+        val channel = Channel<LibWebPAnimatedDecoder.DecodeFrameResult>(
+            capacity = 1,
+            onUndeliveredElement = { bitmapPool.put(it.bitmap) }
+        ).also {
+            decodeChannel = it
         }
+        nextFrame = true
+        invalidateSelf()
         decodeJob = GlobalScope.launch(Dispatchers.Default) {
             val loopCount = decoder.loopCount
             var i = 0
@@ -126,7 +131,6 @@ internal class AnimatedWebPDrawable(
                 if (!isActive) {
                     return@launch
                 }
-                decoder.reset()
                 while (isActive && decoder.hasNextFrame()) {
                     val reuseBitmap = bitmapPool.getDirtyOrNull(
                         decoder.width,
@@ -137,8 +141,13 @@ internal class AnimatedWebPDrawable(
                     if (result == null || result.bitmap !== reuseBitmap) {
                         reuseBitmap?.let { bitmapPool.put(it) }
                     }
-                    decodeChannel.send(result ?: break)
+                    try {
+                        channel.send(result ?: continue)
+                    } catch (e: ClosedSendChannelException) {
+                        break
+                    }
                 }
+                decoder.reset()
                 ++i
             }
         }
@@ -153,6 +162,11 @@ internal class AnimatedWebPDrawable(
 
         nextFrame = false
         unscheduleSelf(nextFrameScheduler)
+
+        decodeChannel?.close()
+        decodeChannel = null
+
+        decoder.reset()
     }
 
     override fun isRunning(): Boolean {
@@ -167,16 +181,6 @@ internal class AnimatedWebPDrawable(
             queueDelaySum -= queueDelayWindow.removeFirst()
         }
         queueDelay = (queueDelaySum / queueDelayWindow.size).coerceAtMost(MAX_QUEUE_DELAY_HEURISTIC)
-    }
-
-    private fun queueNextFrame(
-        time: Long,
-        decodeFrameResult: LibWebPAnimatedDecoder.DecodeFrameResult
-    ) {
-        scheduleSelf(
-            nextFrameScheduler,
-            time + (decodeFrameResult.frameLengthMs - queueDelay).coerceAtLeast(0)
-        )
     }
 
     companion object {
