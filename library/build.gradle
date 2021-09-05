@@ -54,7 +54,7 @@ afterEvaluate {
 
                 groupId = 'com.github.skgmn'
                 artifactId = 'animatedwebpdecoder'
-                version = '0.1.0'
+                version = '0.1.1'
             }
         }
     }
