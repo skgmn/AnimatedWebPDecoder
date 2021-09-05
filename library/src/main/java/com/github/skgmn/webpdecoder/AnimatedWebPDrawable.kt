@@ -164,13 +164,13 @@ internal class AnimatedWebPDrawable(
                         )
                     }
                     val result = decoder.decodeNextFrame(reuseBitmap)
-                    if (!isActive) {
-                        break
-                    }
                     if (result == null || result.bitmap !== reuseBitmap) {
                         reuseBitmap?.let {
                             synchronized(bitmapPool) { bitmapPool.put(it) }
                         }
+                    }
+                    if (!isActive) {
+                        break
                     }
                     if (result == null) {
                         continue
