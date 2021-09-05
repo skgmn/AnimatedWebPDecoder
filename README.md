@@ -43,3 +43,18 @@ val imageLoader = ImageLoader.Builder(context)
     }
     .build()
 ```
+
+# Proguard rules
+
+As it uses native library, it also needs proguard rules. Add these rules to your `proguard-rules.pro`.
+
+```
+-keep class com.github.skgmn.webpdecoder.libwebp.LibWebPAnimatedDecoder {
+    java.nio.ByteBuffer byteBuffer;
+    native <methods>;
+}
+
+-keep class com.github.skgmn.webpdecoder.libwebp.LibWebPAnimatedDecoder$Metadata {
+    *;
+}
+```
