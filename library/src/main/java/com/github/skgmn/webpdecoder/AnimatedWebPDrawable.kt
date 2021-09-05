@@ -8,6 +8,7 @@ import coil.bitmap.BitmapPool
 import com.github.skgmn.webpdecoder.libwebp.LibWebPAnimatedDecoder
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.channels.ClosedSendChannelException
 
 internal class AnimatedWebPDrawable(
@@ -76,11 +77,16 @@ internal class AnimatedWebPDrawable(
             }
             if (isRunning && frameWaitingJob?.isActive != true) {
                 frameWaitingJob = GlobalScope.launch(Dispatchers.Main.immediate) {
-                    pendingDecodeResult = channel.receive()
-                    frameWaitingJob = null
-                    nextFrame = true
-                    queueTime = SystemClock.uptimeMillis()
-                    invalidateSelf()
+                    try {
+                        pendingDecodeResult = channel.receive()
+                        nextFrame = true
+                        queueTime = SystemClock.uptimeMillis()
+                        invalidateSelf()
+                    } catch (e: ClosedReceiveChannelException) {
+                        // failed to receive next frame
+                    } finally {
+                        frameWaitingJob = null
+                    }
                 }
             }
         } else {
@@ -127,10 +133,7 @@ internal class AnimatedWebPDrawable(
         decodeJob = GlobalScope.launch(Dispatchers.Default) {
             val loopCount = decoder.loopCount
             var i = 0
-            while (loopCount == 0 || i < loopCount) {
-                if (!isActive) {
-                    return@launch
-                }
+            while (isActive && (loopCount == 0 || i < loopCount)) {
                 while (isActive && decoder.hasNextFrame()) {
                     val reuseBitmap = bitmapPool.getDirtyOrNull(
                         decoder.width,
@@ -141,30 +144,37 @@ internal class AnimatedWebPDrawable(
                     if (result == null || result.bitmap !== reuseBitmap) {
                         reuseBitmap?.let { bitmapPool.put(it) }
                     }
+                    if (result == null) {
+                        continue
+                    }
                     try {
-                        channel.send(result ?: continue)
+                        channel.send(result)
                     } catch (e: ClosedSendChannelException) {
+                        bitmapPool.put(result.bitmap)
                         break
                     }
                 }
                 decoder.reset()
                 ++i
             }
+            if (isActive) {
+                withContext(Dispatchers.Main.immediate) { stop() }
+            }
         }
     }
 
     override fun stop() {
-        frameWaitingJob?.cancel()
-        frameWaitingJob = null
-
         decodeJob?.cancel()
         decodeJob = null
 
-        nextFrame = false
-        unscheduleSelf(nextFrameScheduler)
-
         decodeChannel?.close()
         decodeChannel = null
+
+        frameWaitingJob?.cancel()
+        frameWaitingJob = null
+
+        nextFrame = false
+        unscheduleSelf(nextFrameScheduler)
 
         decoder.reset()
     }
