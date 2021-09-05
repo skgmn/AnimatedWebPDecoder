@@ -154,7 +154,7 @@ internal class AnimatedWebPDrawable(
         nextFrame = true
         invalidateSelf()
         decodeJob = GlobalScope.launch(Dispatchers.Default) {
-            val loopCount = 3 // decoder.loopCount
+            val loopCount = decoder.loopCount
             var i = 0
             while (isActive && (loopCount == 0 || i < loopCount)) {
                 decoder.reset()
